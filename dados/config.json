@@ -1,0 +1,10 @@
+{
+    "intervalo_confirmacao": 30,
+    "ultima_confirmacao": "2025-04-08T21:06:27.045957",
+    "max_tentativas_senha": 10,
+    "modo_camuflagem": "bloco_notas",
+    "autodestruicao_ativada": true,
+    "nome_exibicao": "Bloco de Notas Port\u00e1til",
+    "email_notificacao": "",
+    "periodo_notificacao": 15
+}
