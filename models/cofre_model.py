@@ -59,6 +59,9 @@ class CofreDigitalModel:
         # Criar estrutura do banco de dados
         self.criar_estrutura_db()
         
+        # Verificar e atualizar a estrutura se necessário
+        self.verificar_estrutura_db()
+        
         # Carregar configurações
         self.carregar_configuracoes()
         
@@ -90,14 +93,13 @@ class CofreDigitalModel:
         CREATE TABLE IF NOT EXISTS senhas (
             id INTEGER PRIMARY KEY,
             titulo TEXT NOT NULL,
-            descricao TEXT,
-            dados_criptografados TEXT NOT NULL,
-            iv TEXT NOT NULL,
+            senha TEXT NOT NULL,
+            usuario TEXT,
+            url TEXT,
+            categoria TEXT,
+            notas TEXT,
             data_criacao TEXT NOT NULL,
-            data_modificacao TEXT NOT NULL,
-            categoria_id INTEGER,
-            compartimento TEXT DEFAULT 'principal',
-            FOREIGN KEY (categoria_id) REFERENCES categorias (id)
+            data_modificacao TEXT
         )
         """)
         
@@ -201,6 +203,88 @@ class CofreDigitalModel:
         
         # Registrar log
         self.registrar_log("sistema", "Estrutura do banco de dados verificada")
+    
+    def verificar_estrutura_db(self):
+        """Verifica e atualiza a estrutura do banco de dados conforme necessário."""
+        try:
+            conn = sqlite3.connect(self.caminho_db)
+            cursor = conn.cursor()
+            
+            # Verificar se a tabela senhas tem todas as colunas necessárias
+            cursor.execute("PRAGMA table_info(senhas)")
+            colunas = {info[1] for info in cursor.fetchall()}
+            
+            # Colunas que devem existir na tabela senhas
+            colunas_necessarias = {
+                "titulo", "senha", "usuario", "url", "categoria", "notas", 
+                "data_criacao", "data_modificacao"
+            }
+            
+            # Verificar se alguma coluna está faltando
+            colunas_faltando = colunas_necessarias - colunas
+            
+            # Se houver colunas faltando, adicionar uma a uma
+            if colunas_faltando:
+                self.registrar_log("sistema", f"Atualizando estrutura da tabela senhas. Adicionando colunas: {', '.join(colunas_faltando)}")
+                
+                # SQLite não permite ALTER TABLE ADD COLUMN com NOT NULL sem valor padrão
+                # Por isso, vamos recriar a tabela se ela estiver muito diferente
+                
+                if "senha" in colunas_faltando or "titulo" in colunas_faltando or "data_criacao" in colunas_faltando:
+                    # Casos que exigiriam NOT NULL, melhor recriar a tabela
+                    # Primeiro, fazer backup da tabela existente
+                    try:
+                        cursor.execute("ALTER TABLE senhas RENAME TO senhas_old")
+                        
+                        # Criar a nova tabela com a estrutura correta
+                        cursor.execute("""
+                        CREATE TABLE senhas (
+                            id INTEGER PRIMARY KEY,
+                            titulo TEXT NOT NULL,
+                            senha TEXT NOT NULL,
+                            usuario TEXT,
+                            url TEXT,
+                            categoria TEXT,
+                            notas TEXT,
+                            data_criacao TEXT NOT NULL,
+                            data_modificacao TEXT
+                        )
+                        """)
+                        
+                        # Transferir dados da tabela antiga para a nova (apenas colunas existentes)
+                        cursor.execute("PRAGMA table_info(senhas_old)")
+                        colunas_old = [info[1] for info in cursor.fetchall()]
+                        
+                        # Colunas em comum entre ambas as tabelas
+                        colunas_comuns = list(set(colunas_old) & set(["id", "titulo", "senha", "usuario", "url", "categoria", "notas", "data_criacao", "data_modificacao"]))
+                        
+                        if colunas_comuns:
+                            # Copiar dados preservando as colunas em comum
+                            colunas_str = ", ".join(colunas_comuns)
+                            cursor.execute(f"INSERT INTO senhas ({colunas_str}) SELECT {colunas_str} FROM senhas_old")
+                        
+                        # Excluir tabela antiga
+                        cursor.execute("DROP TABLE senhas_old")
+                        
+                    except Exception as e:
+                        self.registrar_log("erro", f"Erro ao recriar tabela senhas: {str(e)}")
+                else:
+                    # Adicionar apenas colunas opcionais (sem NOT NULL)
+                    for coluna in colunas_faltando:
+                        try:
+                            cursor.execute(f"ALTER TABLE senhas ADD COLUMN {coluna} TEXT")
+                        except Exception as e:
+                            self.registrar_log("erro", f"Erro ao adicionar coluna {coluna}: {str(e)}")
+                            pass
+                
+                conn.commit()
+            
+            conn.close()
+            return True
+            
+        except Exception as e:
+            self.registrar_log("erro", f"Erro ao verificar estrutura do banco de dados: {str(e)}")
+            return False
     
     def carregar_configuracoes(self):
         """Carrega as configurações do sistema."""
@@ -511,26 +595,58 @@ class CofreDigitalModel:
             pass
     
     def obter_estatisticas(self):
-        """Obtém estatísticas sobre os dados armazenados."""
+        """Obtém estatísticas do uso do sistema no compartimento atual."""
         try:
             conn = sqlite3.connect(self.caminho_db)
             cursor = conn.cursor()
             
-            # Contar senhas
-            cursor.execute(f"SELECT COUNT(*) FROM senhas WHERE compartimento = ?", (self.compartimento_ativo,))
-            count_senhas = cursor.fetchone()[0]
+            # Definir as tabelas com base no compartimento ativo
+            tabela_senhas = "senhas"
+            tabela_notas = "notas"
+            tabela_arquivos = "arquivos"
+            tabela_carteiras = "carteiras_btc"
             
-            # Contar notas
-            cursor.execute(f"SELECT COUNT(*) FROM notas WHERE compartimento = ?", (self.compartimento_ativo,))
-            count_notas = cursor.fetchone()[0]
+            if self.compartimento_ativo != "principal":
+                tabela_senhas = f"compartimento_{self.compartimento_ativo}_senhas"
+                tabela_notas = f"compartimento_{self.compartimento_ativo}_notas"
+                tabela_arquivos = f"compartimento_{self.compartimento_ativo}_arquivos"
+                tabela_carteiras = f"compartimento_{self.compartimento_ativo}_carteiras_btc"
             
-            # Contar arquivos
-            cursor.execute(f"SELECT COUNT(*) FROM arquivos WHERE compartimento = ?", (self.compartimento_ativo,))
-            count_arquivos = cursor.fetchone()[0]
+            # Contar senhas - verifica se a tabela existe primeiro
+            count_senhas = 0
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM {tabela_senhas}")
+                count_senhas = cursor.fetchone()[0]
+            except:
+                # A tabela pode não existir ainda
+                pass
             
-            # Contar carteiras BTC
-            cursor.execute(f"SELECT COUNT(*) FROM carteiras_btc WHERE compartimento = ?", (self.compartimento_ativo,))
-            count_carteiras = cursor.fetchone()[0]
+            # Contar notas - verifica se a tabela existe primeiro
+            count_notas = 0
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM {tabela_notas}")
+                count_notas = cursor.fetchone()[0]
+            except:
+                # A tabela pode não existir ainda
+                pass
+            
+            # Contar arquivos - verifica se a tabela existe primeiro
+            count_arquivos = 0
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM {tabela_arquivos}")
+                count_arquivos = cursor.fetchone()[0]
+            except:
+                # A tabela pode não existir ainda
+                pass
+            
+            # Contar carteiras BTC - verifica se a tabela existe primeiro
+            count_carteiras = 0
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM {tabela_carteiras}")
+                count_carteiras = cursor.fetchone()[0]
+            except:
+                # A tabela pode não existir ainda
+                pass
             
             conn.close()
             
@@ -672,4 +788,274 @@ class CofreDigitalModel:
             
         except Exception as e:
             self.registrar_log("erro", f"Erro ao alternar compartimento: {str(e)}")
-            return False, f"Erro ao alternar compartimento: {str(e)}" 
+            return False, f"Erro ao alternar compartimento: {str(e)}"
+    
+    # === Funções de gerenciamento de senhas ===
+    
+    def listar_senhas(self):
+        """Lista as senhas do compartimento atual."""
+        self._verifica_autenticacao()
+        
+        # Definir a tabela correta com base no compartimento ativo
+        tabela = "senhas"
+        if self.compartimento_ativo != "principal":
+            tabela = f"compartimento_{self.compartimento_ativo}_senhas"
+        
+        try:
+            # Conectar ao banco de dados
+            conn = sqlite3.connect(self.caminho_db)
+            cursor = conn.cursor()
+            
+            # Executar consulta
+            cursor.execute(
+                f"SELECT * FROM {tabela} ORDER BY titulo"
+            )
+            
+            # Converter para lista de dicionários
+            colunas = [coluna[0] for coluna in cursor.description]
+            resultado = [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
+            
+            # Fechar conexão
+            conn.close()
+            
+            return resultado
+            
+        except Exception as e:
+            self.registrar_log("erro", f"Erro ao listar senhas: {str(e)}")
+            return []
+    
+    def obter_senha(self, senha_id):
+        """Obtém os detalhes de uma senha específica."""
+        self._verifica_autenticacao()
+        
+        # Definir a tabela correta com base no compartimento ativo
+        tabela = "senhas"
+        if self.compartimento_ativo != "principal":
+            tabela = f"compartimento_{self.compartimento_ativo}_senhas"
+        
+        try:
+            # Conectar ao banco de dados
+            conn = sqlite3.connect(self.caminho_db)
+            cursor = conn.cursor()
+            
+            # Executar consulta
+            cursor.execute(
+                f"SELECT * FROM {tabela} WHERE id = ?",
+                (senha_id,)
+            )
+            
+            # Obter resultado
+            resultado = cursor.fetchone()
+            
+            if not resultado:
+                conn.close()
+                raise Exception("Senha não encontrada")
+            
+            # Converter para dicionário
+            colunas = [coluna[0] for coluna in cursor.description]
+            senha = dict(zip(colunas, resultado))
+            
+            # Fechar conexão
+            conn.close()
+            
+            return senha
+            
+        except Exception as e:
+            self.registrar_log("erro", f"Erro ao obter senha: {str(e)}")
+            raise e
+    
+    def adicionar_senha(self, titulo, senha, usuario=None, url=None, categoria=None, notas=None):
+        """Adiciona uma nova senha ao sistema."""
+        self._verifica_autenticacao()
+        
+        # Verificar modo de herança
+        if self.modo_heranca_ativo:
+            return False, "Não é possível adicionar senhas no modo de herança"
+        
+        # Definir a tabela correta com base no compartimento ativo
+        tabela = "senhas"
+        if self.compartimento_ativo != "principal":
+            tabela = f"compartimento_{self.compartimento_ativo}_senhas"
+        
+        try:
+            # Conectar ao banco de dados
+            conn = sqlite3.connect(self.caminho_db)
+            cursor = conn.cursor()
+            
+            # Data atual
+            data_criacao = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Inserir senha
+            cursor.execute(
+                f"""
+                INSERT INTO {tabela} 
+                (titulo, senha, usuario, url, categoria, notas, data_criacao) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (titulo, senha, usuario, url, categoria, notas, data_criacao)
+            )
+            
+            # Salvar alterações
+            conn.commit()
+            conn.close()
+            
+            # Registrar log
+            self.registrar_log("sistema", f"Senha '{titulo}' adicionada ao compartimento '{self.compartimento_ativo}'")
+            
+            return True, "Senha adicionada com sucesso"
+            
+        except Exception as e:
+            if 'conn' in locals():
+                conn.rollback()
+                conn.close()
+            self.registrar_log("erro", f"Erro ao adicionar senha: {str(e)}")
+            return False, f"Erro ao adicionar senha: {str(e)}"
+    
+    def atualizar_senha(self, senha_id, titulo=None, senha=None, usuario=None, url=None, categoria=None, notas=None):
+        """Atualiza uma senha existente."""
+        self._verifica_autenticacao()
+        
+        # Verificar modo de herança
+        if self.modo_heranca_ativo:
+            return False, "Não é possível atualizar senhas no modo de herança"
+        
+        # Definir a tabela correta com base no compartimento ativo
+        tabela = "senhas"
+        if self.compartimento_ativo != "principal":
+            tabela = f"compartimento_{self.compartimento_ativo}_senhas"
+        
+        try:
+            # Conectar ao banco de dados
+            conn = sqlite3.connect(self.caminho_db)
+            cursor = conn.cursor()
+            
+            # Verificar se a senha existe
+            cursor.execute(
+                f"SELECT titulo FROM {tabela} WHERE id = ?",
+                (senha_id,)
+            )
+            
+            resultado = cursor.fetchone()
+            if not resultado:
+                conn.close()
+                return False, "Senha não encontrada"
+            
+            titulo_original = resultado[0]
+            
+            # Criar conjunto de campos a atualizar
+            campos = []
+            valores = []
+            
+            if titulo is not None:
+                campos.append("titulo = ?")
+                valores.append(titulo)
+            
+            if senha is not None:
+                campos.append("senha = ?")
+                valores.append(senha)
+            
+            if usuario is not None:
+                campos.append("usuario = ?")
+                valores.append(usuario)
+            
+            if url is not None:
+                campos.append("url = ?")
+                valores.append(url)
+            
+            if categoria is not None:
+                campos.append("categoria = ?")
+                valores.append(categoria)
+            
+            if notas is not None:
+                campos.append("notas = ?")
+                valores.append(notas)
+            
+            # Se não há campos para atualizar
+            if not campos:
+                conn.close()
+                return True, "Nenhum campo para atualizar"
+            
+            # Atualizar senha
+            cursor.execute(
+                f"""
+                UPDATE {tabela} 
+                SET {", ".join(campos)}
+                WHERE id = ?
+                """,
+                valores + [senha_id]
+            )
+            
+            # Salvar alterações
+            conn.commit()
+            conn.close()
+            
+            # Registrar log
+            self.registrar_log("sistema", f"Senha '{titulo_original}' atualizada no compartimento '{self.compartimento_ativo}'")
+            
+            return True, "Senha atualizada com sucesso"
+            
+        except Exception as e:
+            if 'conn' in locals():
+                conn.rollback()
+                conn.close()
+            self.registrar_log("erro", f"Erro ao atualizar senha: {str(e)}")
+            return False, f"Erro ao atualizar senha: {str(e)}"
+    
+    def excluir_senha(self, senha_id):
+        """Exclui uma senha existente."""
+        self._verifica_autenticacao()
+        
+        # Verificar modo de herança
+        if self.modo_heranca_ativo:
+            return False, "Não é possível excluir senhas no modo de herança"
+        
+        # Definir a tabela correta com base no compartimento ativo
+        tabela = "senhas"
+        if self.compartimento_ativo != "principal":
+            tabela = f"compartimento_{self.compartimento_ativo}_senhas"
+        
+        try:
+            # Conectar ao banco de dados
+            conn = sqlite3.connect(self.caminho_db)
+            cursor = conn.cursor()
+            
+            # Verificar se a senha existe
+            cursor.execute(
+                f"SELECT titulo FROM {tabela} WHERE id = ?",
+                (senha_id,)
+            )
+            
+            resultado = cursor.fetchone()
+            if not resultado:
+                conn.close()
+                return False, "Senha não encontrada"
+            
+            titulo = resultado[0]
+            
+            # Excluir senha
+            cursor.execute(
+                f"DELETE FROM {tabela} WHERE id = ?",
+                (senha_id,)
+            )
+            
+            # Salvar alterações
+            conn.commit()
+            conn.close()
+            
+            # Registrar log
+            self.registrar_log("sistema", f"Senha '{titulo}' excluída do compartimento '{self.compartimento_ativo}'")
+            
+            return True, "Senha excluída com sucesso"
+            
+        except Exception as e:
+            if 'conn' in locals():
+                conn.rollback()
+                conn.close()
+            self.registrar_log("erro", f"Erro ao excluir senha: {str(e)}")
+            return False, f"Erro ao excluir senha: {str(e)}"
+    
+    def _verifica_autenticacao(self):
+        """Verifica se o usuário está autenticado e levanta uma exceção se não estiver."""
+        if not self.usuario_autenticado:
+            raise Exception("Usuário não autenticado")
+        return True 

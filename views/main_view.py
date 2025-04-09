@@ -251,4 +251,14 @@ class CofreDigitalView:
         """Atualiza o compartimento ativo em todas as telas."""
         # Atualizar dashboard, se existir
         if self.dashboard_view:
-            self.dashboard_view.atualizar_compartimento(compartimento_id) 
+            self.dashboard_view.atualizar_compartimento(compartimento_id)
+    
+    def mostrar_tela_password(self):
+        """Mostra a tela de gerenciamento de senhas."""
+        from views.password_view import PasswordView
+        
+        # Criar tela de senhas se não existir
+        password_view = PasswordView(self.master, self.controller)
+        
+        # Mostrar tela
+        self.mostrar_frame(password_view) 

@@ -350,4 +350,77 @@ class CofreController:
         elif dias_restantes <= periodo_notificacao:
             return "aviso", f"Restam {dias_restantes} dias para renovar o período."
         else:
-            return "normal", f"Período válido. Restam {dias_restantes} dias." 
+            return "normal", f"Período válido. Restam {dias_restantes} dias."
+    
+    # === Funções de gerenciamento de senhas ===
+    
+    def listar_senhas(self):
+        """Lista as senhas do compartimento atual."""
+        if not self.model.usuario_autenticado:
+            raise Exception("Usuário não autenticado")
+        
+        return self.model.listar_senhas()
+    
+    def obter_senha(self, senha_id):
+        """Obtém os detalhes de uma senha específica."""
+        if not self.model.usuario_autenticado:
+            raise Exception("Usuário não autenticado")
+        
+        return self.model.obter_senha(senha_id)
+    
+    def adicionar_senha(self, titulo, senha, usuario=None, url=None, categoria=None, notas=None):
+        """Adiciona uma nova senha ao compartimento atual."""
+        if not self.model.usuario_autenticado:
+            return False, "Usuário não autenticado"
+        
+        if self.model.modo_heranca_ativo:
+            return False, "Não é possível adicionar senhas no modo de herança"
+        
+        # Validar dados
+        if not titulo or not senha:
+            return False, "Título e senha são obrigatórios"
+        
+        # Chamar o modelo para adicionar a senha
+        return self.model.adicionar_senha(titulo, senha, usuario, url, categoria, notas)
+    
+    def atualizar_senha(self, senha_id, titulo=None, senha=None, usuario=None, url=None, categoria=None, notas=None):
+        """Atualiza uma senha existente."""
+        if not self.model.usuario_autenticado:
+            return False, "Usuário não autenticado"
+        
+        if self.model.modo_heranca_ativo:
+            return False, "Não é possível atualizar senhas no modo de herança"
+        
+        # Chamar o modelo para atualizar a senha
+        return self.model.atualizar_senha(senha_id, titulo, senha, usuario, url, categoria, notas)
+    
+    def excluir_senha(self, senha_id):
+        """Exclui uma senha existente."""
+        if not self.model.usuario_autenticado:
+            return False, "Usuário não autenticado"
+        
+        if self.model.modo_heranca_ativo:
+            return False, "Não é possível excluir senhas no modo de herança"
+        
+        # Chamar o modelo para excluir a senha
+        return self.model.excluir_senha(senha_id)
+    
+    # === Funções de navegação ===
+    
+    def voltar_para_dashboard(self):
+        """Retorna para a tela de dashboard."""
+        if self.view:
+            self.view.mostrar_dashboard(self.model.modo_heranca_ativo)
+            # Forçar atualização das estatísticas
+            if hasattr(self.view, 'dashboard_view') and self.view.dashboard_view:
+                self.view.dashboard_view.atualizar_interface(self.model.modo_heranca_ativo)
+    
+    def abrir_tela_senhas(self):
+        """Abre a tela de gerenciamento de senhas."""
+        if not self.model.usuario_autenticado:
+            return False, "Usuário não autenticado"
+        
+        if self.view:
+            self.view.mostrar_tela_password()
+            
+        return True, "Tela de senhas aberta com sucesso" 

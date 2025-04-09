@@ -655,10 +655,12 @@ class DashboardView(tk.Frame):
     
     def _abrir_senhas(self):
         """Abre a tela de gerenciamento de senhas."""
-        messagebox.showinfo(
-            "Em desenvolvimento",
-            "O gerenciamento de senhas será implementado em uma versão futura."
-        )
+        try:
+            sucesso, mensagem = self.controller.abrir_tela_senhas()
+            if not sucesso:
+                messagebox.showerror("Erro", mensagem)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao abrir gerenciamento de senhas: {str(e)}")
     
     def _abrir_notas(self):
         """Abre a tela de gerenciamento de notas."""
