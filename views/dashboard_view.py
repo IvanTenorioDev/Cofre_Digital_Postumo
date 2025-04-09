@@ -75,7 +75,7 @@ class DashboardView(tk.Frame):
         
         # Grid para estatísticas
         self.grid_estatisticas = tk.Frame(estatisticas_frame, **FRAME_STYLE)
-        self.grid_estatisticas.pack(fill=tk.X, padx=PADDING_MEDIUM, pady=PADDING_MEDIUM)
+        self.grid_estatisticas.pack(fill=tk.X, padx=PADDING_LARGE, pady=PADDING_LARGE)
         
         # Estatísticas serão atualizadas pela função atualizar_interface
         
@@ -154,13 +154,23 @@ class DashboardView(tk.Frame):
             )
             btn.pack(side=tk.LEFT, padx=PADDING_SMALL, pady=PADDING_SMALL)
         
-        # Frame do timer
+        # Frame do timer com altura fixa generosa
         timer_frame = tk.LabelFrame(content_frame, text="Status", **FRAME_STYLE)
         timer_frame.pack(fill=tk.X, pady=PADDING_MEDIUM)
         
+        # Defina uma altura fixa para o frame usando o método after
+        def set_height():
+            timer_frame.configure(height=250)
+            timer_frame.pack_propagate(False)
+        
+        self.master.after(100, set_height)
+        
         # Conteúdo do timer
         timer_content = tk.Frame(timer_frame, **FRAME_STYLE)
-        timer_content.pack(fill=tk.X, padx=PADDING_MEDIUM, pady=PADDING_MEDIUM)
+        timer_content.pack(fill=tk.BOTH, expand=True, padx=PADDING_MEDIUM, pady=PADDING_MEDIUM)
+        
+        # Adicionar espaço superior
+        tk.Frame(timer_content, height=10, **FRAME_STYLE).pack()
         
         # Label para o texto do timer
         self.label_timer_texto = tk.Label(
@@ -169,7 +179,7 @@ class DashboardView(tk.Frame):
             fg=TEXT_COLOR,
             bg=BG_COLOR
         )
-        self.label_timer_texto.pack()
+        self.label_timer_texto.pack(pady=(0, PADDING_SMALL))
         
         # Label para o contador
         self.label_timer = tk.Label(
@@ -179,16 +189,39 @@ class DashboardView(tk.Frame):
             fg=TEXT_COLOR,
             bg=BG_COLOR
         )
-        self.label_timer.pack(pady=PADDING_MEDIUM)
+        self.label_timer.pack(pady=PADDING_SMALL)
         
-        # Botão para renovar período
+        # Container para o botão
+        button_container = tk.Frame(timer_content, height=80, **FRAME_STYLE)
+        button_container.pack(fill=tk.X, pady=PADDING_MEDIUM)
+        button_container.pack_propagate(False)
+        
+        # Botão para renovar período - botão grande e visível
         self.btn_renovar = tk.Button(
-            timer_content,
-            text="Renovar Período",
+            button_container,
+            text="RENOVAR PERÍODO",
             command=self._renovar_periodo,
-            **BUTTON_PRIMARY_STYLE
+            width=25,
+            height=2,
+            font=("Helvetica", 12, "bold"),
+            bg=HIGHLIGHT_COLOR,
+            fg="white",
+            activebackground="#3b5876",
+            activeforeground="white",
+            relief="raised"
         )
-        self.btn_renovar.pack(pady=PADDING_SMALL)
+        self.btn_renovar.place(relx=0.5, rely=0.5, anchor=tk.CENTER)  # Posicionamento absoluto
+        
+        # Adicionar espaço extra no final da interface
+        footer_space = tk.Frame(content_frame, height=50, **FRAME_STYLE)
+        footer_space.pack(fill=tk.X, pady=PADDING_MEDIUM)
+        
+        # Garantir que o botão seja visível em uma chamada após a renderização
+        def ensure_button_visible():
+            if not self.modo_heranca:
+                self.btn_renovar.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+                
+        self.master.after(500, ensure_button_visible)
         
         # Iniciar o timer
         self._iniciar_timer()
@@ -230,11 +263,11 @@ class DashboardView(tk.Frame):
         if modo_heranca:
             self.modo_restrito_frame.pack(fill=tk.X, pady=PADDING_MEDIUM)
             self.label_timer_texto.config(text="Acesso restrito ao compartimento atual")
-            self.btn_renovar.pack_forget()  # Esconder botão de renovar período
+            self.btn_renovar.place_forget()  # Esconder botão
         else:
             self.modo_restrito_frame.pack_forget()
             self.label_timer_texto.config(text="Tempo restante até ativação do modo de herança:")
-            self.btn_renovar.pack(pady=PADDING_SMALL)  # Mostrar botão de renovar período
+            self.btn_renovar.place(relx=0.5, rely=0.5, anchor=tk.CENTER)  # Mostrar botão
         
         # Atualizar estatísticas
         self._atualizar_estatisticas()
@@ -259,26 +292,33 @@ class DashboardView(tk.Frame):
             ("Carteiras BTC", estatisticas.get("carteiras_btc", 0))
         ]
         
+        # Frame centralizado para os cartões
+        cards_frame = tk.Frame(self.grid_estatisticas, **FRAME_STYLE)
+        cards_frame.pack(expand=True)
+        
         # Criar grid
         for i, (titulo, valor) in enumerate(itens):
-            card = tk.Frame(self.grid_estatisticas, **CARD_STYLE)
-            card.grid(row=0, column=i, padx=PADDING_MEDIUM, pady=PADDING_SMALL)
+            # Frame do cartão com tamanho fixo
+            card = tk.Frame(cards_frame, width=130, height=130, **STAT_CARD_STYLE)
+            card.grid(row=0, column=i, padx=PADDING_LARGE, pady=PADDING_MEDIUM)
+            # Garantir que o tamanho do frame não mude
+            card.grid_propagate(False)
             
+            # Adicionar título
             tk.Label(
                 card,
                 text=titulo,
-                font=FONT_BOLD,
-                fg=TEXT_COLOR,
-                bg=FRAME_COLOR
-            ).pack(pady=(PADDING_SMALL, 0))
+                **STAT_TITLE_STYLE
+            ).pack(pady=(PADDING_MEDIUM, 0))
             
-            tk.Label(
+            # Adicionar valor com efeito de relevo
+            valor_label = tk.Label(
                 card,
                 text=str(valor),
-                font=FONT_TITLE,
-                fg=TEXT_COLOR,
-                bg=FRAME_COLOR
-            ).pack(pady=PADDING_SMALL)
+                **STAT_NUMBER_STYLE
+            )
+            # Centralizar verticalmente o número
+            valor_label.pack(pady=PADDING_MEDIUM, expand=True)
     
     def _iniciar_timer(self):
         """Inicia o timer para atualização automática."""

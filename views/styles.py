@@ -24,6 +24,9 @@ FONT_SIZE_LARGE = 14
 FONT_SIZE_XLARGE = 18
 FONT_SIZE_TITLE = 24
 
+# Fonte para números grandes
+FONT_NUMBER = (FONT_FAMILY, 36, "bold")
+
 # Estilos de fonte
 FONT_NORMAL = (FONT_FAMILY, FONT_SIZE_NORMAL)
 FONT_BOLD = (FONT_FAMILY, FONT_SIZE_NORMAL, "bold")
@@ -93,4 +96,29 @@ CARD_STYLE = {
     "highlightthickness": 1,
     "padx": 15,
     "pady": 15
+}
+
+# Estilo para cartões de estatísticas
+STAT_CARD_STYLE = {
+    "bg": "white",
+    "relief": "sunken",
+    "bd": 2,
+    "highlightbackground": "#cccccc",
+    "highlightthickness": 1,
+    "padx": 20,
+    "pady": 10
+}
+
+# Estilo para números de estatísticas
+STAT_NUMBER_STYLE = {
+    "bg": "white",
+    "fg": HIGHLIGHT_COLOR,
+    "font": FONT_NUMBER
+}
+
+# Estilo para título de estatísticas
+STAT_TITLE_STYLE = {
+    "bg": "white",
+    "fg": TEXT_COLOR,
+    "font": FONT_BOLD
 } 
