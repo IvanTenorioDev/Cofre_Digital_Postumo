@@ -3,3 +3,8 @@ __pycache__/
 *.py[cod]
 *.db
 *.sqlite3
+
+# Dados específicos do aplicativo
+dados/*.db
+dados/*.json
+dados/config/
